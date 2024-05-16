@@ -1,4 +1,4 @@
-pyi-makespec --noconsole --onefile ^
+pyi-makespec --onefile ^
     --name=rock-paper-scissors-battle-royale ^
     --icon=icon.ico ^
     --splash splash.png ^
