@@ -152,12 +152,16 @@ class Game(tk.Frame):
                     (RPSEntityType.PAPER, RPSEntityType.SCISSORS),
                     (RPSEntityType.SCISSORS, RPSEntityType.ROCK)
                 ]:
-                    entity.entity_type = other.entity_type
-                    #self.entities.remove(entity)
+                    if self.params.eliminate and entity in self.entities:
+                        self.entities.remove(entity)
+                    else:
+                        entity.entity_type = other.entity_type
                 else:
-                    other.entity_type = entity.entity_type
-                    #self.entities.remove(other)
-        
+                    if self.params.eliminate and other in self.entities:
+                        self.entities.remove(other)
+                    else:
+                        other.entity_type = entity.entity_type
+
         if Debug.TEAMS_COUNTS in self.debug:
             self.game.create_text(10, 10, text=f"Rock: {counts[0]}", fill="black", font="verdana", anchor=tk.NW)
             self.game.create_text(10, 30, text=f"Paper: {counts[1]}", fill="black", font="verdana", anchor=tk.NW)
@@ -194,11 +198,14 @@ class GraphWindow(tk.Toplevel):
 
         self.fig = plt.figure(figsize=(7,4), dpi=100)
         self.ax = self.fig.add_subplot()
-        self.ax.set_ylim(0, 100)
 
-        self.ax.plot(0, 0, color="red", label="Rock %")
-        self.ax.plot(0, 0, color="green", label="Paper %")
-        self.ax.plot(0, 0, color="blue", label="Scissors %")
+        self.maximum = 101 if self.master.params.density else sum(self.master.params.spawn_amount)
+        
+        self.ax.set_ylim(-1, self.maximum)
+
+        self.ax.plot(0, 0, color="red", label=f"Rock{" %" if self.master.params.density else ""}")
+        self.ax.plot(0, 0, color="green", label=f"Paper{" %" if self.master.params.density else ""}")
+        self.ax.plot(0, 0, color="blue", label=f"Scissors{" %" if self.master.params.density else ""}")
 
         self.fig.legend(loc="upper left", bbox_to_anchor=((0.1, 1)))
 
@@ -214,7 +221,7 @@ class GraphWindow(tk.Toplevel):
         self.scissors = np.append(self.scissors, counts[2])
 
         if not self.thread.is_alive():
-            self.thread = threading.Thread(target=GraphWindow.__update_graph_thread, args=(self.fig, self.ax, not self.master.params.no_blit, self.x, self.rock / sum(counts) * 100, self.paper / sum(counts) * 100, self.scissors / sum(counts) * 100), daemon=True)
+            self.thread = threading.Thread(target=GraphWindow.__update_graph_thread, args=(self.fig, self.ax, not self.master.params.no_blit, self.master.params.density, self.maximum, self.x, self.rock, self.paper, self.scissors), daemon=True)
             self.thread.start()
 
             if not self.master.params.no_blit:
@@ -223,7 +230,13 @@ class GraphWindow(tk.Toplevel):
                 self.paper = self.paper[-2:]
                 self.scissors = self.scissors[-2:]
     
-    def __update_graph_thread(fig: matplotlib.figure.Figure, ax: matplotlib.axes.Axes, blit, x, rock, paper, scissors):
+    def __update_graph_thread(fig: matplotlib.figure.Figure, ax: matplotlib.axes.Axes, blit, density, maximum, x, rock, paper, scissors):
+        if density:
+            density_factor = 100 / sum([rock[0], paper[0], scissors[0]])
+            rock = rock[:] * density_factor
+            paper = paper[:] * density_factor
+            scissors = scissors[:] * density_factor
+
         if blit:
             bg = fig.canvas.copy_from_bbox(ax.bbox)
 
@@ -241,10 +254,10 @@ class GraphWindow(tk.Toplevel):
         else:
             ax.cla()
 
-            ax.plot(x, rock, color="red", label="Rock %", linewidth=2)
-            ax.plot(x, paper, color="green", label="Paper %", linewidth=2)
-            ax.plot(x, scissors, color="blue", label="Scissors %", linewidth=2)
-            ax.set_ylim([0, 100])
+            ax.plot(x, rock, color="red", label=f"Rock{" %" if density else ""}", linewidth=2)
+            ax.plot(x, paper, color="green", label=f"Paper{" %" if density else ""}", linewidth=2)
+            ax.plot(x, scissors, color="blue", label=f"Scissors{" %" if density else ""}", linewidth=2)
+            ax.set_ylim(-1, maximum)
 
             fig.legend(loc="upper left", bbox_to_anchor=((0.1, 1)))
 
@@ -260,6 +273,8 @@ def main():
     parser.add_argument("-H", "--height", type=int, nargs=1, metavar="HEIGHT", default=500, help="Height of the game window, will default to 500")
     parser.add_argument("-G", "--draw-graph", action="store_true", help="Draw a live graph of the populations of rock, paper and scissors")
     parser.add_argument("-B", "--no-blit", action="store_true", help="Disable blitting for drawing the live graph (not recommended)")
+    parser.add_argument("-E", "--eliminate", action="store_true", help="Enable eliminate mode, where entities that lose will be destroyed rather than converted")
+    parser.add_argument("-D", "--density", action="store_true", help="Instead of graphing the size of the teams' populations, graph their density")
     parser.add_argument("-N", "--spawn_amount", type=int, metavar="NUM", nargs=3, default=[20, 20, 20], help="Number of rocks, papers and scissors (respectively) to spawn")
 
     args = parser.parse_args()
